@@ -108,6 +108,42 @@ def trainIters(pairs, vocab, encoder, decoder, n_iters, print_every=1000,
             loss_total = 0
             print(f'{iter} / {n_iters}, loss: {loss_avg}')
 
+def evaluate(encoder, decoder, sentence, vocab, max_length=MAX_LENGTH):
+    with torch.no_grad():
+        input_tensor = tensorFromSentence(vocab, sentence)
+        input_length = input_tensor.size()[0]
+        encoder_hidden = encoder.initHidden()
+        encoder_outputs = torch.zeros(max_length, encoder.hidden_size,
+                                      device=device)
+        for ei in range(input_length):
+            encoder_output, encoder_hidden = encoder(input_tensor[ei],
+                                                     encoder_hidden)
+            encoder_outputs[ei] += encoder_output[0, 0]
+        decoder_input = torch.tensor([[SOS_token]], device=device)  # SOS
+        decoder_hidden = encoder_hidden
+        decoded_words = []
+        for di in range(max_length):
+            decoder_output, decoder_hidden = decoder(
+                decoder_input, decoder_hidden)
+            topv, topi = decoder_output.data.topk(1)
+            if topi.item() == EOS_token:
+                decoded_words.append('<EOS>')
+                break
+            else:
+                decoded_words.append(vocab[topi.item()])
+            decoder_input = topi.squeeze().detach()
+        return decoded_words
+
+def evaluateRandomly(encoder, decoder, vocab, pairs, n=10):
+    for i in range(n):
+        pair = random.choice(pairs)
+        print('>', pair[0])
+        print('=', pair[1])
+        output_words = evaluate(encoder, decoder, pair[0], vocab)
+        output_sentence = ' '.join(output_words)
+        print('<', output_sentence)
+        print()
+
 train_data_path = sys.argv[1]
 with open(train_data_path, 'r') as f:
     train_data = f.read().splitlines()
@@ -118,3 +154,4 @@ hidden_size = 256
 encoder = EncoderRNN(vocab_size, hidden_size).to(device)
 decoder = DecoderRNN(hidden_size, vocab_size).to(device)
 trainIters(train_pairs, vocab, encoder, decoder, 10000, print_every=100)
+evaluateRandomly(encoder, decoder, vocab, train_pairs)
